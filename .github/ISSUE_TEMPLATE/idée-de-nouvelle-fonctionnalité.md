@@ -2,7 +2,7 @@
 name: Idée de nouvelle Fonctionnalité
 about: Soumettez nous une nouvelle idée de Fonctionnalité
 title: Nouvelle Fonctionnalité
-labels: Nouvelle Fonctionnalité
+labels: bug, Nouvelle Fonctionnalité
 assignees: LesTravaux, jmagro21, rphaelsi
 
 ---
