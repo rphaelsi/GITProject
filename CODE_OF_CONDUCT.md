@@ -1,3 +1,4 @@
+t
 # Code de conduite
 
 En tant que contributeur et utilisateur de ce projet, nous nous engageons à maintenir un environnement respectueux, accueillant et inclusif pour tous, indépendamment de l'âge, de l'ascendance, de la couleur de peau, de la religion, du handicap, de l'état civil, de l'identité de genre, de l'expression de genre, de l'orientation sexuelle ou de toute autre caractéristique personnelle.
