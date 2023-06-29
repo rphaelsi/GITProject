@@ -5,7 +5,7 @@
 #include "manip.h"
 #include "bruteforce.h"
 #include "navigate.h"
-
+// Réglé
 int main(int argc, char *argv[])
 {
     zip_t *zip = NULL;

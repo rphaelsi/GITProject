@@ -1,5 +1,5 @@
 #include "manip.h"
-
+//Code corrigé
 int importe(char *file_PATH, char *archive_PATH)
 {
 

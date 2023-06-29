@@ -137,3 +137,4 @@ int bruteforce(char *zipname)
     free(password);
     return 0;
 }
+// BUF FIX 1
