@@ -7,6 +7,8 @@
     free(printed_directories);
 }
 
+
+
 // Fonction Extracte pour récuperer des documents dans l'archive.
 int extract(const char *filename) {
     // Concaténer le chemin actuel avec le nom du fichier
@@ -114,3 +116,6 @@ int import(const char *filename) {
         zip_source_free(src);
         printf("Erreur: Impossible d'ajouter le fichier '%s' à l'archive.\n", fullpath);
         return -1;
+
+        
+//Corrigé BUGFIX
