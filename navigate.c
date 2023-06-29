@@ -1,16 +1,29 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <zip.h>
+#include <libgen.h>
+#include <stdbool.h>
 #include "navigate.h"
 
+#define PATH_MAX 4096
+#define COMMAND_MAX 256
+#define MAX_DEPTH 100
 
+char current_dir[PATH_MAX] = "";
+char command[COMMAND_MAX];
+
+zip_t *zip = NULL;
+zip_int64_t num_entries = 0;
 
 // Fonction pour ouvrir le fichier ZIP
-zip_t* open_zip(int* num_entries, const char* zipname, const char* password) {
-    zip_t *zip = NULL;
-    zip_error_t ziperror;
+int open_zip(const char *zipname, const char *password) {
     int err = 0;
+    zip_error_t ziperror;
 
     if (!zipname) {
         printf("Erreur: Pas de nom de fichier fourni.\n");
-        return NULL;
+        return -1;
     }
 
     zip = zip_open(zipname, 0, &err);
@@ -44,124 +57,13 @@ zip_t* open_zip(int* num_entries, const char* zipname, const char* password) {
 
         zip_fclose(file);
     }
-    *num_entries = zip_get_num_entries(zip, 0);
+
     printf("Fichier ZIP ouvert: %s\n", zipname);
-    return zip;
-}
-
-
-// Fonction pour afficher la hiérarchie des dossiers et des fichiers pour un répertoire donné
-void display_directory(const char *directory) {
-    zip_t *zip = NULL;
-zip_int64_t num_entries = 0;
-    int directory_length = strlen(directory);
-
-    for (zip_int64_t i = 0; i < num_entries; i++) {
-        const char *name = zip_get_name(zip, i, ZIP_FL_UNCHANGED);
-
-        // Check if the name starts with the given directory
-        if (strncmp(name, directory, directory_length) == 0) {
-            const char *remaining_path = name + directory_length;
-
-            // Check if the remaining path is a direct file/directory (i.e., it does not contain '/')
-            char *next_slash = strchr(remaining_path, '/');
-
-            // If there's no next slash, print the file name
-            if (next_slash == NULL) {
-                printf("%s\n", remaining_path);
-            }
-            // If there is a next slash and it's the last character, print the directory name
-            else if (strcmp(next_slash, "/") == 0) {
-                printf("%s\n", remaining_path);
-            }
-            // If there is a next slash and it's not the last character, print the directory name up to the slash
-            else {
-                char *dir_name = strndup(remaining_path, next_slash - remaining_path);
-                printf("%s/\n", dir_name);
-                free(dir_name);
-            }
-        }
-    }
-}
-
-//Structure pour représenter un nœud dans l'arborescence
-// typedef struct path_node {
-//     char *name;
-//     struct path_node *next;
-// } path_node;
-
-// typedef struct Node {
-//     char *name;
-//     struct Node **children;
-//     int num_children;
-// } Node;
-
-path_node *path_head = NULL;
-char current_dir[PATH_MAX] = "";
-char command[COMMAND_MAX];
-
-// Fonction pour créer un nouveau nœud
-Node *new_node(const char *name) {
-    Node *node = malloc(sizeof(Node));
-    node->name = strdup(name);
-    node->children = NULL;
-    node->num_children = 0;
-    return node;
-}
-
-// Fonction pour ajouter un enfant à un nœud
-void add_child(Node *node, Node *child) {
-    node->children = realloc(node->children, (node->num_children + 1) * sizeof(Node *));
-    node->children[node->num_children++] = child;
-}
-
-// Fonction pour trouver un enfant avec un nom donné
-Node *find_child(Node *node, const char *name) {
-    for (int i = 0; i < node->num_children; i++) {
-        if (strcmp(node->children[i]->name, name) == 0) {
-            return node->children[i];
-        }
-    }
-    return NULL;
-}
-
-// Fonction pour construire l'arborescence à partir des noms de fichiers dans l'archive ZIP
-Node *build_tree(zip_t *zip) {
-    Node *root = new_node("");
-
-    for (zip_int64_t i = 0; i < zip_get_num_entries(zip, 0); i++) {
-        const char *name = zip_get_name(zip, i, 0);
-        char *name_copy = strdup(name);
-
-        Node *current = root;
-        char *segment = strtok(name_copy, "/");
-        while (segment) {
-            Node *child = new_node(segment);
-            add_child(current, child);
-            current = child;
-            segment = strtok(NULL, "/");
-        }
-
-        free(name_copy);
-    }
-
-    return root;
-}
-
-// Fonction pour afficher l'arborescence
-void print_tree(Node *node, int depth) {
-    for (int i = 0; i < depth; i++) {
-        printf("\t");
-    }
-    printf("%s\n", node->name);
-    for (int i = 0; i < node->num_children; i++) {
-        print_tree(node->children[i], depth + 1);
-    }
+    return 0;
 }
 
 // Changer le dossier actuel
-int change_dir(zip_t* zip, const char *dir) {
-    zip_int64_t num_entries = zip_get_num_entries(zip, 0);
+int change_dir(const char *dir) {
     // Si la commande est 'cd ..', remonter au dossier parent
     if(strcmp(dir, "..") == 0) {
         // Si current_dir est déjà une chaîne vide (nous sommes déjà à la racine)
@@ -229,8 +131,7 @@ int change_dir(zip_t* zip, const char *dir) {
 }
 
 
-
-void list_files(zip_t* zip) {
+void list_files() {
     // Le nombre total d'entrées dans l'archive ZIP
     zip_int64_t num_entries = zip_get_num_entries(zip, 0);
 
@@ -290,9 +191,160 @@ void list_files(zip_t* zip) {
     free(printed_directories);
 }
 
+// Fonction Extracte pour récuperer des documents dans l'archive.
+int extract(const char *filename) {
+    // Concaténer le chemin actuel avec le nom du fichier
+    char fullpath[PATH_MAX] = {0};
+    if (strcmp(current_dir, "") == 0) {
+        snprintf(fullpath, PATH_MAX, "%s", filename);
+    } else {
+        snprintf(fullpath, PATH_MAX, "%s%s", current_dir, filename);
+    }
+    // Vérifier si le chemin complet existe dans l'archive ZIP
+    zip_int64_t index = zip_name_locate(zip, fullpath, ZIP_FL_ENC_GUESS);
+    if (index < 0) {
+        printf("Erreur: Le fichier '%s' n'existe pas dans l'archive.\n", fullpath);
+        return -1;
+    }
+    // Vérifier si le chemin complet est un répertoire
+    zip_stat_t sb;
+    if (zip_stat_index(zip, index, 0, &sb) == 0) {
+        if (sb.name[strlen(sb.name) - 1] == '/') {
+            printf("Erreur: '%s' est un répertoire, non un fichier.\n", fullpath);
+            return -1;
+        }
+    }
+    // Ouvrir le fichier dans l'archive ZIP
+    zip_file_t *file = zip_fopen_index(zip, index, 0);
+    if (!file) {
+        printf("Erreur: Impossible d'ouvrir le fichier '%s' dans l'archive.\n", fullpath);
+        return -1;
+    }
+    // Lire le fichier et l'écrire dans un nouveau fichier sur le système de fichiers
+    char buffer[4096];
+    zip_int64_t bytes_read;
+    FILE *out = fopen(filename, "wb");
+    if (!out) {
+        printf("Erreur: Impossible de créer le fichier '%s'.\n", filename);
+        zip_fclose(file);
+        return -1;
+    }
+    while ((bytes_read = zip_fread(file, buffer, sizeof(buffer))) > 0) {
+        fwrite(buffer, 1, bytes_read, out);
+    }
+    // Fermer les fichiers et confirmer que l'extraction a été réussie
+    fclose(out);
+    zip_fclose(file);
+    printf("Fichier '%s' extrait avec succès.\n", filename);
+
+    return 0;
+}
+
+// Fonction pour créer un nouveau fichier dans l'archive.
+int touch(const char *filename) {
+    // Concaténer le chemin actuel avec le nom du fichier
+    char fullpath[PATH_MAX] = {0};
+    if (strcmp(current_dir, "") == 0) {
+        snprintf(fullpath, PATH_MAX, "%s", filename);
+    } else {
+        snprintf(fullpath, PATH_MAX, "%s%s", current_dir, filename);
+    }
+    // Vérifier si le chemin complet existe déjà dans l'archive ZIP
+    zip_int64_t index = zip_name_locate(zip, fullpath, ZIP_FL_ENC_GUESS);
+    if (index >= 0) {
+        printf("Erreur: Le fichier '%s' existe déjà dans l'archive.\n", fullpath);
+        return -1;
+    }
+    // Créer un nouveau fichier avec un contenu vide
+    zip_source_t *src = zip_source_buffer(zip, NULL, 0, 0);
+    if (src == NULL) {
+        printf("Erreur: Impossible de créer une nouvelle source pour le fichier '%s'.\n", fullpath);
+        return -1;
+    }
+    index = zip_file_add(zip, fullpath, src, ZIP_FL_OVERWRITE);
+    if (index < 0) {
+        zip_source_free(src);
+        printf("Erreur: Impossible d'ajouter le fichier '%s' à l'archive.\n", fullpath);
+        return -1;
+    }
+    printf("Fichier '%s' créé avec succès.\n", filename);
+    return 0;
+}
+
+// Fonction pour ajouter un fichier à l'archive ZIP
+int import(const char *filename) {
+    // Préparer le chemin complet du nouveau fichier dans l'archive
+    char fullpath[PATH_MAX] = {0};
+    if (strcmp(current_dir, "") == 0) {
+        snprintf(fullpath, PATH_MAX, "%s", filename);
+    } else {
+        snprintf(fullpath, PATH_MAX, "%s%s", current_dir, filename);
+    }
+    // Vérifiez si le fichier existe déjà dans l'archive
+    zip_int64_t index = zip_name_locate(zip, fullpath, ZIP_FL_ENC_GUESS);
+    if (index >= 0) {
+        printf("Erreur: Le fichier '%s' existe déjà dans l'archive.\n", fullpath);
+        return -1;
+    }
+    // Créer une source à partir du fichier local
+    zip_source_t *src = zip_source_file_create(filename, 0, 0, NULL);
+    if (src == NULL) {
+        printf("Erreur: Impossible de créer une source à partir du fichier '%s'.\n", filename);
+        return -1;
+    }
+    // Ajouter le fichier à l'archive
+    index = zip_file_add(zip, fullpath, src, ZIP_FL_OVERWRITE);
+    if (index < 0) {
+        zip_source_free(src);
+        printf("Erreur: Impossible d'ajouter le fichier '%s' à l'archive.\n", fullpath);
+        return -1;
+    }
+    printf("Fichier '%s' importé avec succès dans l'archive.\n", filename);
+    return 0;
+}
+
+// Fonction pour supprimer un fichier de l'archive ZIP
+int remove_file(const char *filename) {
+    // Préparer le chemin complet du fichier à supprimer dans l'archive
+    char fullpath[PATH_MAX] = {0};
+    if (strcmp(current_dir, "") == 0) {
+        snprintf(fullpath, PATH_MAX, "%s", filename);
+    } else {
+        snprintf(fullpath, PATH_MAX, "%s%s", current_dir, filename);
+    }
+
+    // Vérifiez si le fichier existe dans l'archive
+    zip_int64_t index = zip_name_locate(zip, fullpath, ZIP_FL_ENC_GUESS);
+    if (index < 0) {
+        printf("Erreur: Le fichier '%s' n'existe pas dans l'archive.\n", fullpath);
+        return -1;
+    }
+
+    // Supprimez le fichier de l'archive
+    if (zip_delete(zip, index) < 0) {
+        printf("Erreur: Impossible de supprimer le fichier '%s' de l'archive.\n", fullpath);
+        return -1;
+    }
+
+    printf("Fichier '%s' supprimé avec succès de l'archive.\n", filename);
+    return 0;
+}
+
+// Invite de confirmation pour la suppression
+int confirm_remove(const char *filename) {
+    char response[3];
+    printf("Êtes-vous sûr de vouloir supprimer le fichier '%s' de l'archive ? (y/n) ", filename);
+    fgets(response, sizeof(response), stdin);
+    if (response[0] == 'y' || response[0] == 'Y') {
+        return remove_file(filename);
+    } else {
+        printf("Suppression annulée.\n");
+        return 0;
+    }
+}
 
 // Fonction pour gérer une session interactive
-void interactive_session(zip_t* zip) {
+void interactive_session() {
     char current_directory[4096] = "/";  // Start at root
 
     while(1) {
@@ -311,13 +363,69 @@ void interactive_session(zip_t* zip) {
             }
         } else if(strcmp(command, "ls") == 0) {
             list_files();
+        } else if(strncmp(command, "extract ", 8)==0) {
+            char *filename = command + 8;
+            if (filename == NULL || *filename =='\0'){
+                printf("Erreur: Fichier ou dossier manquant \n");
+            } else {
+                extract(filename);
+            }
+        }
+        else if(strncmp(command, "touch ", 6) == 0) {
+            char *filename = command + 6;
+            if (filename == NULL || *filename =='\0'){
+                printf("Erreur: Nom de fichier manquant après 'touch '\n");
+            } else {
+                touch(filename);
+                printf("Vous devez relancer le programme pour voir votre nouveau fichier.");
+                break;
+            }
+        }
+        else if(strncmp(command, "import ", 7) == 0) {
+            char *filename = command + 7;
+            if (filename == NULL || *filename =='\0'){
+                printf("Erreur: Nom de fichier manquant après 'import '\n");
+            } else {
+                import(filename);
+                printf("Vous devez relancer le programme pour voir votre nouveau fichier.");
+                break;
+            }
+        }
+        else if(strncmp(command, "rm ", 3) == 0) {
+            char *filename = command + 3;
+            if (filename == NULL || *filename =='\0'){
+                printf("Erreur: Nom de fichier manquant après 'rm '\n");
+            } else {
+                confirm_remove(filename);
+            }
         } else {
             printf("Commande non reconnue : '%s'\n", command);
         }
     }
 }
 
-// int navigate_zip(zip_t* zip, int num_entries, const char* zipname, const char* password) {
+// int main(int argc, char *argv[]) {
+//     char *password = NULL;
+//     char *zipname = NULL;
+
+//     // Vérifiez les paramètres
+//     for (int i = 1; i < argc; i++) {
+//         if (strcmp(argv[i], "-o") == 0) {
+//             if(i+1 < argc) {
+//                 zipname = argv[++i];
+//             } else {
+//                 printf("Erreur: Nom de fichier manquant après -o\n");
+//                 return -1;
+//             }
+//         } else if (strncmp(argv[i], "-p=", 3) == 0) {
+//             password = argv[i] + 3;
+//             if(password == NULL || *password == '\0') {
+//                 printf("Erreur: Mot de passe manquant après -p=\n");
+//                 return -1;
+//             }
+//         }
+//     }
+
 //     if (open_zip(zipname, password) != 0) {
 //         return -1;
 //     }
@@ -325,52 +433,9 @@ void interactive_session(zip_t* zip) {
 //     num_entries = zip_get_num_entries(zip, 0);
 //     interactive_session();
 
+
 //     // Fermer le fichier ZIP
 //     zip_close(zip);
 
 //     return 0;
 // }
-
-
-int main(int argc, char *argv[]) {
-    char *password = NULL;
-    char *zipname = NULL;
-    zip_t *zip = NULL;
-    int num_entries = 0;
-
-    // Vérifiez les paramètres
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-o") == 0) {
-            if(i+1 < argc) {
-                zipname = argv[++i];
-            } else {
-                printf("Erreur: Nom de fichier manquant après -o\n");
-                return -1;
-            }
-        } else if (strncmp(argv[i], "-p=", 3) == 0) {
-            password = argv[i] + 3;
-            if(password == NULL || *password == '\0') {
-                printf("Erreur: Mot de passe manquant après -p=\n");
-                return -1;
-            }
-        }
-    }
-
-    zip = open_zip(&num_entries, zipname, password);
-    if (zim == NULL) {
-        return -1;
-    }
-
-    // printf("Affichage de la hiérarchie des dossiers et des fichiers :\n");
-    // Node *root = build_tree(zip);
-    // print_tree(root, 0);
-
-    num_entries = zip_get_num_entries(zip, 0);
-    interactive_session();
-
-
-    // Fermer le fichier ZIP
-    zip_close(zip);
-
-    return 0;
-}
