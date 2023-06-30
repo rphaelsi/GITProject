@@ -1,3 +1,11 @@
+[![Slack](https://img.shields.io/badge/slack-join-blue.svg)](https://example.com/community/join-us-on-slack/)
+[![Email](https://img.shields.io/badge/email-join-blue.svg)](https://groups.google.com/forum/#!forum/example)
+[![Documentation](https://img.shields.io/badge/docs-view-green.svg)](https://documentation.example.com)
+[![Documentation](https://img.shields.io/badge/web-view-green.svg)](https://doc.test.com)
+[![Coverity](https://scan.coverity.com/projects/10992/badge.svg)](https://scan.coverity.com/projects/)
+[![Twitter](https://img.shields.io/twitter/follow/sgt?style=social)](https://twitter.com/)
+[![YouTube](https://img.shields.io/youtube/views/peTSzcAueEc?style=social)](https://www.youtube.com/watch?v=jIQ6UV2onyI&ab_channel=TuNeoTec)
+
 # Introduction : Compre-C
 
 Le projet voit le jour dans un contexte scolaire dans le but de mettre en pratique les différentes notions du langage C dans un outil de manipulation des fichiers ZIP. L'objectif étant d'obtenir un outil performant, une structrure de fichier et un code bien organisé ainsi que la manipulation de différentes autres notions.
